@@ -1,10 +1,12 @@
 import { type SubmitEvent, useState } from 'react'
 import { sightings } from '../data/placeholders'
+import { supabase } from '../lib/supabaseClient'
 
 export function SightingsPage() {
   const [parkId, setParkId] = useState('')
   const [speciesId, setSpeciesId] = useState('')
   const [dateTime, setDateTime] = useState('')
+  const [selectedFile, setSelectedFile] = useState(null);
 
   function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
@@ -18,10 +20,32 @@ export function SightingsPage() {
     setDateTime('')
   }
 
+  const onFileChange = (event) => {
+    setSelectedFile(event.target.files[0]);
+  };
+
+  async function onFileUpload() {
+    console.log(selectedFile);
+
+    const { data, error } = await supabase.storage.from('sightingImages').upload('file_path', selectedFile)
+    if (error) {
+      console.log("upload return error", error)
+    } else {
+      console.log("upload return data ", data)
+    }
+  }
+
   return (
     <div>
       <h1>Sightings</h1>
       <h2>New sighting (demo form)</h2>
+
+      <div>
+        <input type="file" onChange={onFileChange} />
+        <button onClick={onFileUpload}>Upload!</button>
+
+      </div>
+
       <form onSubmit={handleSubmit}>
         <div>
           <label htmlFor="s-park">
