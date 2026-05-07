@@ -15,6 +15,8 @@ export function SightingsPage() {
       speciesId,
       dateTime,
     })
+    // TODO: Create a sighting record with this information and the path
+    // of the file that was uploaded to the bucket previously
     setParkId('')
     setSpeciesId('')
     setDateTime('')
@@ -26,12 +28,18 @@ export function SightingsPage() {
 
   async function onFileUpload() {
     console.log(selectedFile);
+    // Filename needs to only use "S3 safe characters" https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
+    // This appends epoch time stamp and truncates before any spaces
+    let santizedFilename = `${Date.now()}-${selectedFile.name.split(' ')[0]}`
 
-    const { data, error } = await supabase.storage.from('sightingImages').upload('file_path', selectedFile)
+    const { data, error } = await supabase.storage.from('sightingImages').upload(santizedFilename, selectedFile)
     if (error) {
       console.log("upload return error", error)
     } else {
       console.log("upload return data ", data)
+      // The data returned has keys of path, id, and fullPath.
+      // When we create the sightings record with the other form data,
+      // we want to add the path to it.
     }
   }
 
