@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { AuthPage } from './pages/AuthPage'
 import { ParksPage } from './pages/ParksPage'
+import { ParkDetailPage } from './pages/ParkDetailPage'
 import { SightingsPage } from './pages/SightingsPage'
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/parks" replace />} />
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/parks" element={<ParksPage />} />
+          <Route path="/park/:id" element={<ParkDetailPage />} />
           <Route path="/sightings" element={<SightingsPage />} />
         </Route>
       </Routes>

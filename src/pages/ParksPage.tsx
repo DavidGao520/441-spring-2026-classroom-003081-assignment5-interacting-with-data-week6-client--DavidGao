@@ -1,18 +1,40 @@
-import { type SubmitEvent, useState } from 'react'
-import { parks, type Park } from '../data/placeholders'
+import { type SubmitEvent, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { api, type ApiPark } from '../lib/api'
 
 export function ParksPage() {
+  const [parks, setParks] = useState<ApiPark[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [idInput, setIdInput] = useState('')
-  const [selected, setSelected] = useState<Park | null>(null)
+  const [selected, setSelected] = useState<ApiPark | null>(null)
   const [lookedUp, setLookedUp] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .listParks()
+      .then((data) => {
+        if (cancelled) return
+        setParks(data)
+        setLoading(false)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setError(e.message)
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
     const trimmed = idInput.trim()
-    console.log({ id: trimmed })
     setLookedUp(true)
     const match = parks.find(
-      (p) => p.ID.toLowerCase() === trimmed.toLowerCase(),
+      (p) => p.id.toLowerCase() === trimmed.toLowerCase(),
     )
     setSelected(match ?? null)
     setIdInput('')
@@ -35,20 +57,28 @@ export function ParksPage() {
       </form>
       {selected && (
         <p>
-          Selected: {selected.Name} ({selected.State}) — id {selected.ID}
+          Selected:{' '}
+          <Link to={`/park/${selected.id}`}>
+            {selected.name} ({selected.state}) — id {selected.id}
+          </Link>
         </p>
       )}
-      {lookedUp && !selected && (
-        <p>No park found for that id (check console for submitted value).</p>
-      )}
+      {lookedUp && !selected && <p>No park found for that id.</p>}
+
       <h2>All parks</h2>
-      <ul>
-        {parks.map((p) => (
-          <li key={p.ID}>
-            {p.Name}, {p.State}
-          </li>
-        ))}
-      </ul>
+      {loading && <p>Loading…</p>}
+      {error && <p>Error loading parks: {error}</p>}
+      {!loading && !error && (
+        <ul>
+          {parks.map((p) => (
+            <li key={p.id}>
+              <Link to={`/park/${p.id}`}>
+                {p.name}, {p.state}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
