@@ -1,5 +1,6 @@
 import { type ChangeEvent, type SubmitEvent, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { api, type ApiSighting } from '../lib/api'
 
 const BUCKET = 'SightingsImages'
 
@@ -19,6 +20,8 @@ export function SightingsPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  const [recent, setRecent] = useState<ApiSighting[]>([])
+
   useEffect(() => {
     if (!supabase) {
       setAuthErrorMessage(
@@ -33,6 +36,45 @@ export function SightingsPage() {
         setAuthErrorMessage('Please log in (on the Auth page) to create a sighting.')
       }
     })
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .listSightings()
+      .then((data) => {
+        if (cancelled) return
+        const sorted = [...data].sort(
+          (a, b) => new Date(b.DateTime).getTime() - new Date(a.DateTime).getTime(),
+        )
+        setRecent(sorted.slice(0, 20))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    const sb = supabase
+    if (!sb) return
+    const channel = sb
+      .channel('all-sightings')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sightings' },
+        (payload) => {
+          const row = payload.new as ApiSighting
+          setRecent((prev) => {
+            if (prev.some((s) => s.id === row.id)) return prev
+            return [row, ...prev].slice(0, 20)
+          })
+        },
+      )
+      .subscribe()
+    return () => {
+      void sb.removeChannel(channel)
+    }
   }, [])
 
   function onFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -93,11 +135,31 @@ export function SightingsPage() {
     setNotice('Sighting created. View it on the park page.')
   }
 
+  const recentList = (
+    <>
+      <h2>Recent sightings (live)</h2>
+      {recent.length === 0 ? (
+        <p>No sightings yet.</p>
+      ) : (
+        <ul>
+          {recent.map((s) => (
+            <li key={s.id}>
+              <strong>{s.SpeciesID}</strong> at <strong>{s.ParkID}</strong> —{' '}
+              {new Date(s.DateTime).toLocaleString()}
+              {s.Notes ? ` — ${s.Notes}` : ''}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  )
+
   if (authErrorMessage) {
     return (
       <div>
         <h1>Sightings</h1>
         <p>{authErrorMessage}</p>
+        {recentList}
       </div>
     )
   }
@@ -159,6 +221,8 @@ export function SightingsPage() {
         </div>
         <button type="submit" disabled={busy}>Submit</button>
       </form>
+
+      {recentList}
     </div>
   )
 }

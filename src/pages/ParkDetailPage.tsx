@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, type ApiSighting } from '../lib/api'
+import { supabase } from '../lib/supabaseClient'
 
 function toIsoOrEmpty(localValue: string) {
   if (!localValue) return ''
@@ -41,6 +42,39 @@ export function ParkDetailPage() {
       })
     return () => {
       cancelled = true
+    }
+  }, [parkID, since, before])
+
+  // Live updates: append new sightings for this park as they're inserted.
+  useEffect(() => {
+    const sb = supabase
+    if (!parkID || !sb) return
+    const sinceMs = since ? new Date(toIsoOrEmpty(since)).getTime() : null
+    const beforeMs = before ? new Date(toIsoOrEmpty(before)).getTime() : null
+    const channel = sb
+      .channel(`park-${parkID}-sightings`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'sightings',
+          filter: `ParkID=eq.${parkID}`,
+        },
+        (payload) => {
+          const row = payload.new as ApiSighting
+          const ts = new Date(row.DateTime).getTime()
+          if (sinceMs !== null && ts < sinceMs) return
+          if (beforeMs !== null && ts > beforeMs) return
+          setSightings((prev) => {
+            if (prev.some((s) => s.id === row.id)) return prev
+            return [row, ...prev]
+          })
+        },
+      )
+      .subscribe()
+    return () => {
+      void sb.removeChannel(channel)
     }
   }, [parkID, since, before])
 
