@@ -96,3 +96,25 @@ Restart `npm run dev` after you change env vars.
 ---
 
 Built with [Vite](https://vite.dev/) + [React](https://react.dev/) + [React Router](https://reactrouter.com/) + [@supabase/supabase-js](https://supabase.com/docs/reference/javascript/introduction).
+
+## Security
+
+### XSS
+
+The app is React 19 (`src/main.tsx`) and React auto-escapes anything inside `{}` in JSX. User-controlled stuff like the sighting `Notes` (`src/pages/ParkDetailPage.tsx` around line 112, `{s.Notes}`), the park name on `ParksPage.tsx`, and the logged-in user's email on `AuthPage.tsx` all render as text nodes, not html. I don't use `dangerouslySetInnerHTML` anywhere and there's no `react-markdown` or anything like it. The one place a url gets built from data is the sighting image in `SightingImage` (`ParkDetailPage.tsx` ~line 129), and its base is the hard-coded `${VITE_SUPABASE_URL}/storage/v1/object/public/SightingsImages/...`, so a `javascript:` url can't sneak into `<img src>`.
+
+### SQL injection
+
+The client never writes sql. Writes go through `supabase-js` — `SightingsPage.tsx` calls `supabase.from('sightings').insert(row)` around line 78 — which sends values as a typed body to PostgREST, not as a sql string. Reads through my own api pass path params through `encodeURIComponent` first (`src/lib/api.ts:36`), so an id like `1; DROP TABLE sightings` reaches the server as a literal string and gets parameterized again on that side.
+
+### DDoS
+
+Hosted on Vercel so the edge eats the volumetric stuff before it gets near my code. Every `useEffect` that fires api calls has a stable dependency array — `ParkDetailPage.tsx:21` keys off `[parkID, since, before]` with a cancellation flag, `ParksPage.tsx:13` and `SightingsPage.tsx:22` run once with `[]`. So mounting a page can't accidentally spin up an infinite loop hammering the api. The new Supabase Realtime subscription on `ParkDetailPage` and `SightingsPage` is one long-lived websocket per page instead of a polling loop, so live updates actually mean *fewer* requests, not more.
+
+### Broken Access Control (OWASP A01)
+
+Session state lives in supabase-js. `AuthPage.tsx` reads the session with `supabase.auth.getSession()` and listens for changes with `supabase.auth.onAuthStateChange(...)` (~line 19); sign in / sign up go through `signInWithPassword` and `signUp` (lines 45 and 61). `SightingsPage.tsx` only shows the submit form once it has a `userId` (lines 96–103), otherwise it shows a please-log-in message. But that's only a UX gate. The real rule lives in the database — the `sightings` table has RLS policies that say you can only insert with your own `auth.uid()` and only delete a row where `UserID` matches `auth.uid()`. So even if you bypassed the disabled button somehow, Supabase still rejects the write.
+
+### Security Misconfiguration (OWASP A05)
+
+Vite only bundles env vars prefixed with `VITE_` into the client js. `src/lib/supabaseClient.ts` reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. The anon key is meant to be public — data safety depends on the RLS policies, not on the key being secret. The service-role key never has a `VITE_` prefix so it never ends up in the bundle. Password input on `AuthPage.tsx:126-134` uses `type="password"` with `autoComplete="current-password"`. The real gap is that I don't set a Content-Security-Policy anywhere — adding a `headers` block to `vercel.json` for CSP, `X-Frame-Options: DENY`, and `X-Content-Type-Options: nosniff` would be the next step.
