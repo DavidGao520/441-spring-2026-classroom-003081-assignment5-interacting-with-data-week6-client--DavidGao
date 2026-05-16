@@ -32,7 +32,10 @@ export function ParkDetailPage() {
       })
       .then((data) => {
         if (cancelled) return
-        setSightings(data)
+        const sorted = [...data].sort(
+          (a, b) => new Date(b.DateTime).getTime() - new Date(a.DateTime).getTime(),
+        )
+        setSightings(sorted)
         setLoading(false)
       })
       .catch((e) => {
