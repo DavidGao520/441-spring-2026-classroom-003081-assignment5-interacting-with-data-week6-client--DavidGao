@@ -95,6 +95,55 @@ Restart `npm run dev` after you change env vars.
 
 ---
 
+## Development Guide
+
+### Running with Docker
+
+The repo has a multi-stage `Dockerfile`. Stage 1 runs `npm run build` with the Vite env vars baked in at build time (that's just how Vite works — `import.meta.env.VITE_*` is replaced with literal strings during the build). Stage 2 copies the resulting `dist/` into an `nginx:alpine` image and serves the static files. `nginx.conf` includes a SPA fallback so client-side routes like `/park/ACAD` don't 404 on refresh.
+
+**Build a new image** (after changing code) — pass the Vite env vars as build args, tag with a version + `latest`:
+
+```bash
+docker build \
+  --build-arg VITE_API_BASE_URL=http://localhost:3000 \
+  --build-arg VITE_SUPABASE_URL=https://your-project-id.supabase.co \
+  --build-arg VITE_SUPABASE_ANON_KEY=sb_publishable_... \
+  -t wildlife-client:0.1.0 -t wildlife-client:latest .
+```
+
+Bump `0.1.0` → `0.1.1` etc. when you publish a real change. `latest` is a moving alias to whatever you built most recently.
+
+**Run the container** and map host port 5173 to the container's nginx port 80:
+
+```bash
+docker run -d --name wildlife-client -p 5173:80 wildlife-client:0.1.0
+```
+
+Open `http://localhost:5173` in a browser.
+
+**Stop the container** (leaves it on disk so you can start it again):
+
+```bash
+docker stop wildlife-client
+```
+
+`docker start wildlife-client` brings it back.
+
+**Delete the container** when you're done:
+
+```bash
+docker rm wildlife-client          # if already stopped
+docker rm -f wildlife-client       # force-stop and remove in one shot
+```
+
+Remove the image too with `docker rmi wildlife-client:0.1.0` if you want to clean up.
+
+### Running both services together
+
+The API repo (`../assignment4-api`) has a `docker-compose.yml` that builds and runs both this client and the API in one shot. From that repo: `docker compose up --build`. `docker compose down` to stop and remove everything.
+
+---
+
 Built with [Vite](https://vite.dev/) + [React](https://react.dev/) + [React Router](https://reactrouter.com/) + [@supabase/supabase-js](https://supabase.com/docs/reference/javascript/introduction).
 
 ## Security
